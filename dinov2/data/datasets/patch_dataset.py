@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+from pathlib import Path
 
 import pyvips
 from PIL import Image
@@ -19,8 +20,9 @@ class PatchDataset(Dataset):
         self.transform = transform
         self.patches = []
 
-        wsis = glob.glob(f"{patches_dir}/*.json")
-        for file in tqdm(wsis, desc="Reading data"):
+        config_files = glob.glob(f"{patches_dir}/*.json")
+        self.wsis = [Path(c).stem for c in config_files]
+        for file in tqdm(config_files, desc="Reading data"):
             with open(file, "r") as f:
                 slide_data = json.load(f)
             for patch in slide_data["patch_pos"]:
