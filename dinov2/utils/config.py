@@ -9,11 +9,11 @@ import logging
 import os
 from omegaconf import OmegaConf
 
-import src.dinov2.distributed as distributed
-from src.dinov2.logging import setup_logging
-from src.dinov2.utils import utils
-from configs.dinov2 import dinov2_default_config
-from src.dinov2.utils.tracking import ExperimentTracker
+import dinov2.distributed as distributed
+from dinov2.logging import setup_logging
+from dinov2.utils import utils
+from dinov2.configs import dinov2_default_config
+from dinov2.utils.tracking import ExperimentTracker
 
 logger = logging.getLogger("dinov2")
 project_root = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent.parent
