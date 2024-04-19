@@ -63,4 +63,5 @@ class ExperimentTracker:
         except FileNotFoundError:
             print("Train artifacts not found")
         except NoCredentialsError:
-            print("AWS credentials not available so train artifacts not uploaded to s3")
+            print(f"AWS credentials not available so train artifacts not uploaded to s3. "
+                  f"Weights stored in {tarfile_path}")
