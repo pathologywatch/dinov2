@@ -1,6 +1,8 @@
 import glob
-import pandas as pd
-from pathlib import Path
+import json
+import os
+
+import pyvips
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import Dataset
@@ -45,3 +47,19 @@ class PatchDataset(Dataset):
                         }
                     )
         print(f"Dataset will use {len(self)} patches")
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(self, idx):
+        patch_data = self.patches[idx]
+        if patch_data["on_disk"]:
+            image = Image.open(patch_data["patch_path"]).convert("RGB")
+        else:
+            slide_img = pyvips.Image.openslideload(
+                patch_data["slide_path"], level=patch_data["slide_level"]
+            )
+            image = Image.fromarray(slide_img.crop(*patch_data["patch_pos"]).numpy()[..., :3])
+        if self.transform:
+            image = self.transform(image)
+        return image, None
