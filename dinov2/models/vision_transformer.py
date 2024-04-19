@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn.init import trunc_normal_
 
-from dinov2.layers import Mlp, PatchEmbed, SwiGLUFFNFused, MemEffAttention, NestedTensorBlock as Block
+from src.dinov2.layers import Mlp, PatchEmbed, SwiGLUFFNFused, MemEffAttention, NestedTensorBlock as Block
 
 
 logger = logging.getLogger("dinov2")
@@ -65,6 +65,7 @@ class DinoVisionTransformer(nn.Module):
         num_register_tokens=0,
         interpolate_antialias=False,
         interpolate_offset=0.1,
+        is_training=False
     ):
         """
         Args:
@@ -93,7 +94,7 @@ class DinoVisionTransformer(nn.Module):
         """
         super().__init__()
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
-
+        self.is_training = is_training
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.num_tokens = 1
         self.n_blocks = depth
@@ -188,25 +189,21 @@ class DinoVisionTransformer(nn.Module):
         dim = x.shape[-1]
         w0 = w // self.patch_size
         h0 = h // self.patch_size
-        M = int(math.sqrt(N))  # Recover the number of patches in each dimension
-        assert N == M * M
-        kwargs = {}
-        if self.interpolate_offset:
-            # Historical kludge: add a small number to avoid floating point error in the interpolation, see https://github.com/facebookresearch/dino/issues/8
-            # Note: still needed for backward-compatibility, the underlying operators are using both output size and scale factors
-            sx = float(w0 + self.interpolate_offset) / M
-            sy = float(h0 + self.interpolate_offset) / M
-            kwargs["scale_factor"] = (sx, sy)
-        else:
-            # Simply specify an output size instead of a scale factor
-            kwargs["size"] = (w0, h0)
+        # we add a small number to avoid floating point error in the interpolation
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        w0, h0 = w0 + self.interpolate_offset, h0 + self.interpolate_offset
+
+        sqrt_N = math.sqrt(N)
+        sx, sy = float(w0) / sqrt_N, float(h0) / sqrt_N
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, M, M, dim).permute(0, 3, 1, 2),
+            patch_pos_embed.reshape(1, int(sqrt_N), int(sqrt_N), dim).permute(0, 3, 1, 2),
+            scale_factor=(sx, sy),
             mode="bicubic",
             antialias=self.interpolate_antialias,
-            **kwargs,
         )
-        assert (w0, h0) == patch_pos_embed.shape[-2:]
+
+        assert int(w0) == patch_pos_embed.shape[-2]
+        assert int(h0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(previous_dtype)
 
@@ -310,7 +307,7 @@ class DinoVisionTransformer(nn.Module):
         if norm:
             outputs = [self.norm(out) for out in outputs]
         class_tokens = [out[:, 0] for out in outputs]
-        outputs = [out[:, 1 + self.num_register_tokens :] for out in outputs]
+        outputs = [out[:, 1 + self.num_register_tokens:] for out in outputs]
         if reshape:
             B, _, w, h = x.shape
             outputs = [
@@ -321,9 +318,9 @@ class DinoVisionTransformer(nn.Module):
             return tuple(zip(outputs, class_tokens))
         return tuple(outputs)
 
-    def forward(self, *args, is_training=False, **kwargs):
+    def forward(self, *args, **kwargs):
         ret = self.forward_features(*args, **kwargs)
-        if is_training:
+        if self.is_training:
             return ret
         else:
             return self.head(ret["x_norm_clstoken"])

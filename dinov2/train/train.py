@@ -12,16 +12,17 @@ from functools import partial
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
 
-from dinov2.data import SamplerType, make_data_loader, make_dataset
-from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
-import dinov2.distributed as distributed
-from dinov2.fsdp import FSDPCheckpointer
-from dinov2.logging import MetricLogger
-from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler
+from src.dinov2.data import SamplerType, make_data_loader
+from src.dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
+import src.dinov2.distributed as distributed
+from src.dinov2.fsdp import FSDPCheckpointer
+from src.dinov2.logging import MetricLogger
+from src.dinov2.utils.config import setup
+from src.dinov2.utils.utils import CosineScheduler
 
-from dinov2.train.ssl_meta_arch import SSLMetaArch
+from src.dinov2.train.ssl_meta_arch import SSLMetaArch
 
+from src.dinov2.data.datasets.patch_dataset import PatchDataset
 
 torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
 logger = logging.getLogger("dinov2")
@@ -54,7 +55,14 @@ For python-based LazyConfig, use "path.key=value".
         type=str,
         help="Output directory to save logs and checkpoints",
     )
-
+    parser.add_argument(
+        "--input",
+        "--input",
+        default="",
+        type=str,
+        help="Input directory for dataset (for Docker support)",
+    )
+    parser.add_argument("--local-rank", default=0, type=int, help="Variable for distributed computing.")
     return parser
 
 
@@ -131,7 +139,7 @@ def do_test(cfg, model, iteration):
         torch.save({"teacher": new_state_dict}, teacher_ckp_path)
 
 
-def do_train(cfg, model, resume=False):
+def do_train(cfg, model, tracker, resume=False):
     model.train()
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
@@ -190,13 +198,7 @@ def do_train(cfg, model, resume=False):
     )
 
     # setup data loader
-
-    dataset = make_dataset(
-        dataset_str=cfg.train.dataset_path,
-        transform=data_transform,
-        target_transform=lambda _: (),
-    )
-    # sampler_type = SamplerType.INFINITE
+    dataset = PatchDataset(cfg.train.dataset_path, transform=data_transform)
     sampler_type = SamplerType.SHARDED_INFINITE
     data_loader = make_data_loader(
         dataset=dataset,
@@ -291,12 +293,12 @@ def do_train(cfg, model, resume=False):
 
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()
+    tracker.save_run(None, dataset)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
 def main(args):
-    cfg = setup(args)
-
+    cfg, tracker = setup(args)
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
 
@@ -310,7 +312,7 @@ def main(args):
         )
         return do_test(cfg, model, f"manual_{iteration}")
 
-    do_train(cfg, model, resume=not args.no_resume)
+    do_train(cfg, model, tracker, resume=not args.no_resume)
 
 
 if __name__ == "__main__":

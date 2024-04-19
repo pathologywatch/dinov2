@@ -9,14 +9,14 @@ import logging
 import torch
 from torch import nn
 
-from dinov2.loss import DINOLoss, iBOTPatchLoss, KoLeoLoss
-from dinov2.models import build_model_from_cfg
-from dinov2.layers import DINOHead
-from dinov2.utils.utils import has_batchnorms
-from dinov2.utils.param_groups import get_params_groups_with_decay, fuse_params_groups
-from dinov2.fsdp import get_fsdp_wrapper, ShardedGradScaler, get_fsdp_modules, reshard_fsdp_model
+from src.dinov2.loss import DINOLoss, iBOTPatchLoss, KoLeoLoss
+from src.dinov2.models import build_model_from_cfg
+from src.dinov2.layers import DINOHead
+from src.dinov2.utils.utils import has_batchnorms
+from src.dinov2.utils.param_groups import get_params_groups_with_decay, fuse_params_groups
+from src.dinov2.fsdp import get_fsdp_wrapper, ShardedGradScaler, get_fsdp_modules, reshard_fsdp_model
 
-from dinov2.models.vision_transformer import BlockChunk
+from src.dinov2.models.vision_transformer import BlockChunk
 
 
 try:
@@ -37,7 +37,7 @@ class SSLMetaArch(nn.Module):
         student_model_dict = dict()
         teacher_model_dict = dict()
 
-        student_backbone, teacher_backbone, embed_dim = build_model_from_cfg(cfg)
+        student_backbone, teacher_backbone, embed_dim = build_model_from_cfg(cfg, is_training=True)
         student_model_dict["backbone"] = student_backbone
         teacher_model_dict["backbone"] = teacher_backbone
         logger.info(f"OPTIONS -- architecture : embed_dim: {embed_dim}")
@@ -157,7 +157,7 @@ class SSLMetaArch(nn.Module):
         @torch.no_grad()
         def get_teacher_output():
             x, n_global_crops_teacher = global_crops, n_global_crops
-            teacher_backbone_output_dict = self.teacher.backbone(x, is_training=True)
+            teacher_backbone_output_dict = self.teacher.backbone(x)
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
             teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops_teacher)
             # watch out: these are chunked and cat'd in reverse so A is matched to B in the global crops dino loss
@@ -233,7 +233,7 @@ class SSLMetaArch(nn.Module):
 
         loss_accumulator = 0  # for backprop
         student_global_backbone_output_dict, student_local_backbone_output_dict = self.student.backbone(
-            [global_crops, local_crops], masks=[masks, None], is_training=True
+            [global_crops, local_crops], masks=[masks, None]
         )
 
         inputs_for_student_head_list = []
@@ -348,7 +348,14 @@ class SSLMetaArch(nn.Module):
     def fsdp_synchronize_streams(self):
         if self.need_to_synchronize_fsdp_streams:
             torch.cuda.synchronize()
-            for attr in {"_unshard_stream", "_post_backward_stream", "_pre_unshard_stream", "_all_reduce_stream", "_default_stream"}:
+            # https://github.com/facebookresearch/dinov2/pull/281
+            for attr in {
+                "_unshard_stream",
+                "_post_backward_stream",
+                "_pre_unshard_stream",
+                "_all_reduce_stream",
+                "_default_stream",
+            }:
                 stream = getattr(self.teacher.backbone, attr)
                 setattr(self.student.dino_head, attr, stream)
                 setattr(self.teacher.dino_head, attr, stream)

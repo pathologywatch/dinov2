@@ -2,20 +2,21 @@
 #
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
+from pathlib import Path
 
 import math
 import logging
 import os
-
 from omegaconf import OmegaConf
 
-import dinov2.distributed as distributed
-from dinov2.logging import setup_logging
-from dinov2.utils import utils
-from dinov2.configs import dinov2_default_config
-
+import src.dinov2.distributed as distributed
+from src.dinov2.logging import setup_logging
+from src.dinov2.utils import utils
+from configs.dinov2 import dinov2_default_config
+from src.dinov2.utils.tracking import ExperimentTracker
 
 logger = logging.getLogger("dinov2")
+project_root = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent.parent
 
 
 def apply_scaling_rules_to_cfg(cfg):  # to fix
@@ -37,7 +38,11 @@ def write_config(cfg, output_dir, name="config.yaml"):
     return saved_cfg_path
 
 
-def get_cfg_from_args(args):
+def get_cfg_from_args(args, is_eval):
+    if not is_eval:
+        args.config_file = (
+                project_root / "configs" / "dinov2" / f"{args.config_file}.yaml"
+        )
     args.output_dir = os.path.abspath(args.output_dir)
     args.opts += [f"train.output_dir={args.output_dir}"]
     default_cfg = OmegaConf.create(dinov2_default_config)
@@ -60,13 +65,23 @@ def default_setup(args):
     logger.info("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
 
 
-def setup(args):
+def setup(args, is_eval=False):
     """
     Create configs and perform basic setups.
     """
-    cfg = get_cfg_from_args(args)
-    os.makedirs(args.output_dir, exist_ok=True)
+    cfg = get_cfg_from_args(args, is_eval=is_eval)
+    tracker = None
+    if not is_eval:
+        if args.input != '':
+            cfg.train.dataset_path = str(project_root / args.input)
+        else:
+            cfg.train.dataset_path = str(project_root / cfg.train.dataset_path)
+        tracker = ExperimentTracker(str(project_root), OmegaConf.to_container(cfg, resolve=True))
+        cfg.train.run_id = tracker.run_id
+        cfg.train.output_dir = str(project_root / tracker.run_dir)
+        args.output_dir = cfg.train.output_dir
+    os.makedirs(cfg.train.output_dir, exist_ok=True)
     default_setup(args)
     apply_scaling_rules_to_cfg(cfg)
     write_config(cfg, args.output_dir)
-    return cfg
+    return cfg, tracker
