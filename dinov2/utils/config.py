@@ -72,10 +72,6 @@ def setup(args, is_eval=False):
     cfg = get_cfg_from_args(args, is_eval=is_eval)
     tracker = None
     if not is_eval:
-        if args.input != '':
-            cfg.train.dataset_path = str(project_root / args.input)
-        else:
-            cfg.train.dataset_path = str(project_root / cfg.train.dataset_path)
         tracker = ExperimentTracker(str(project_root), OmegaConf.to_container(cfg, resolve=True))
         cfg.train.run_id = tracker.run_id
         cfg.train.output_dir = str(project_root / tracker.run_dir)
