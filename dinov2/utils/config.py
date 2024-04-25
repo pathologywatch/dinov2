@@ -9,11 +9,11 @@ import logging
 import os
 from omegaconf import OmegaConf
 
-import dinov2.distributed as distributed
-from dinov2.logging import setup_logging
-from dinov2.utils import utils
-from dinov2.configs import dinov2_default_config
-from dinov2.utils.tracking import ExperimentTracker
+import src.dinov2.distributed as distributed
+from src.dinov2.logging import setup_logging
+from src.dinov2.utils import utils
+from configs.dinov2 import dinov2_default_config
+from src.dinov2.utils.tracking import ExperimentTracker
 
 logger = logging.getLogger("dinov2")
 project_root = Path(os.path.dirname(os.path.abspath(__file__))).parent.parent.parent
@@ -72,6 +72,10 @@ def setup(args, is_eval=False):
     cfg = get_cfg_from_args(args, is_eval=is_eval)
     tracker = None
     if not is_eval:
+        if args.input != '':
+            cfg.train.dataset_path = str(project_root / args.input)
+        else:
+            cfg.train.dataset_path = str(project_root / cfg.train.dataset_path)
         tracker = ExperimentTracker(str(project_root), OmegaConf.to_container(cfg, resolve=True))
         cfg.train.run_id = tracker.run_id
         cfg.train.output_dir = str(project_root / tracker.run_dir)

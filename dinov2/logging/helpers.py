@@ -11,7 +11,7 @@ import time
 
 import torch
 
-import dinov2.distributed as distributed
+import src.dinov2.distributed as distributed
 
 
 logger = logging.getLogger("dinov2")
