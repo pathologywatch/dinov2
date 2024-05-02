@@ -2,8 +2,9 @@ import glob
 import json
 import os
 from pathlib import Path
+import numpy as np
 
-import pyvips
+from openslide import OpenSlide
 from PIL import Image
 from tqdm import tqdm
 from torch.utils.data import Dataset
@@ -58,10 +59,12 @@ class PatchDataset(Dataset):
         if patch_data["on_disk"]:
             image = Image.open(patch_data["patch_path"]).convert("RGB")
         else:
-            slide_img = pyvips.Image.openslideload(
-                patch_data["slide_path"], level=patch_data["slide_level"]
-            )
-            image = Image.fromarray(slide_img.crop(*patch_data["patch_pos"]).numpy()[..., :3])
+            level = patch_data["slide_level"]
+            with OpenSlide(patch_data["slide_path"]) as osr:
+                # Reads the entire slide
+                x1, y1, width, height = patch_data["patch_pos"]
+                slide_img = osr.read_region((x1, y1), level, (width, height))
+            image = slide_img.convert("RGB")
         if self.transform:
             image = self.transform(image)
         return image, None
