@@ -2,7 +2,6 @@ import glob
 import json
 import os
 from pathlib import Path
-import numpy as np
 
 from openslide import OpenSlide
 from PIL import Image
@@ -57,14 +56,14 @@ class PatchDataset(Dataset):
     def __getitem__(self, idx):
         patch_data = self.patches[idx]
         if patch_data["on_disk"]:
-            image = Image.open(patch_data["patch_path"]).convert("RGB")
+            patch_img = Image.open(patch_data["patch_path"]).convert("RGB")
         else:
             level = patch_data["slide_level"]
             with OpenSlide(patch_data["slide_path"]) as osr:
                 # Reads the entire slide
                 x1, y1, width, height = patch_data["patch_pos"]
-                slide_img = osr.read_region((x1, y1), level, (width, height))
-            image = slide_img.convert("RGB")
+                patch_img = osr.read_region((x1, y1), level, (width, height))
+            patch_img = patch_img.convert("RGB")
         if self.transform:
-            image = self.transform(image)
-        return image, None
+            patch_img = self.transform(patch_img)
+        return patch_img, None
