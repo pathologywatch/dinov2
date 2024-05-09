@@ -36,16 +36,15 @@ class PatchDataset(Dataset):
                         }
                     )
                 else:
-                    p_x1 = patch["x1"]
-                    p_y1 = patch["y1"]
-                    p_width = patch["x2"] - p_x1
-                    p_height = patch["y2"] - p_y1
+                    p_x1 = patch["lvl0_x1"]
+                    p_y1 = patch["lvl0_y1"]
+                    p_width = patch["lvl0_x2"] - p_x1
+                    p_height = patch["lvl0_y2"] - p_y1
                     self.patches.append(
                         {
                             "on_disk": False,
                             "slide_path": slide_data["slide_path"],
-                            "slide_level": slide_data["slide_level"],
-                            "patch_pos": (p_x1, p_y1, p_width, p_height),
+                            "patch_position": (p_x1, p_y1, p_width, p_height),
                         }
                     )
         print(f"Dataset will use {len(self)} patches")
@@ -58,10 +57,10 @@ class PatchDataset(Dataset):
         if patch_data["on_disk"]:
             patch_img = Image.open(patch_data["patch_path"]).convert("RGB")
         else:
-            level = patch_data["slide_level"]
+            level = 0
             with OpenSlide(patch_data["slide_path"]) as osr:
                 # Reads the entire slide
-                x1, y1, width, height = patch_data["patch_pos"]
+                x1, y1, width, height = patch_data["patch_position"]
                 patch_img = osr.read_region((x1, y1), level, (width, height))
             patch_img = patch_img.convert("RGB")
         if self.transform:
