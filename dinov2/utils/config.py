@@ -72,9 +72,9 @@ def setup(args, is_eval=False):
     cfg = get_cfg_from_args(args, is_eval=is_eval)
     tracker = None
     if not is_eval:
-        tracker = ExperimentTracker(str(project_root), OmegaConf.to_container(cfg, resolve=True))
+        tracker = ExperimentTracker(str(args.output_dir), OmegaConf.to_container(cfg, resolve=True))
         cfg.train.run_id = tracker.run_id
-        cfg.train.output_dir = str(project_root / tracker.run_dir)
+        cfg.train.output_dir = str(Path(args.output_dir) / tracker.run_dir)
         args.output_dir = cfg.train.output_dir
     os.makedirs(cfg.train.output_dir, exist_ok=True)
     default_setup(args)

@@ -8,11 +8,10 @@ from botocore.exceptions import NoCredentialsError
 
 
 class ExperimentTracker:
-    def __init__(self, project_root, config):
-        self.project_root = project_root
+    def __init__(self, output_dir, config):
         self.experiment_name = config['train']['experiment_name']
         self.config = config
-        self.runs_dir = os.path.join('runs', self.experiment_name)
+        self.runs_dir = os.path.join(output_dir, self.experiment_name)
         self.run_id = str(uuid.uuid4())
         self.run_dir = os.path.join(self.runs_dir, self.run_id)
         os.makedirs(self.run_dir, exist_ok=True)
